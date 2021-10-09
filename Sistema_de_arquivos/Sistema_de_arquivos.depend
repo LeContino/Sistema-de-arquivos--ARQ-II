@@ -1,0 +1,6 @@
+# depslib dependency file v1.0
+1633739037 source:c:\users\lelec\documents\git\le\sistema-de-arquivos--arq-ii\sistema_de_arquivos\leitura_de_arquivo.c
+	<stdio.h>
+	<stdlib.h>
+	<string.h>
+
