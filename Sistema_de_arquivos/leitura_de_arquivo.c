@@ -1,47 +1,82 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#define padrao 256  //padrao representa o 2^8 que aparece diversas vezes no enunciado do problema
-//#define tam_cluster 32000  // 32kb
+#include <stdbool.h>
+#define padrao 255                                               //padrao representa o 2^8 que aparece diversas vezes no enunciado do problema -> 0 a 255 =256
+#define tamanho_cluster 32768
+#define inicio_ind 8                                             // 1 byte tam do indice, 2 bytes tam do cluster, 2 bytes inicio do indice, 2 bytes inicio root  -> prox byte é posicao do indice
+#define pos_root 263                                             // 7 bytes posteriores +256 bytes de indice
 
-int main(){
 
-    FILE*fat;
-    int val=1;
-    int tam_indice=padrao;
-    int inicio_indice=0;
-    int pos_cluster_um=0;       //posição do primeiro cluster
-    int distancia=0;            //calcula o tamanho total dos indices , ou seja, (posição inicial + 255)*sizeof(int)
+typedef struct folder_pattern{
+
+    bool ler_bit:1; //indica se há algo para ler
+    bool eh_pasta_bit:1; // indica se é pasta ou arquivo
+    short ponteiro;
+    char nome[16];
+
+}FOLDER;
+
+typedef struct metadados{
+
+    char tam_indice;                                            // char é implicitamente transformado em um numero  --> 8 bits
+    unsigned short tam_cluster;                                 // 1kB= 1024B
+    short inicio_indice;                                        //inicio do indice --> 16 bits
+    short inicio_root;                                          //posição do primeiro cluster
+
+}METADADOS;
+
+
+void cria_arquivo(METADADOS dados, FILE* arq)
+{
     int i,j;
-    int tam_cluster = 32000;
+    char val=0;
 
-//criação do arquivo
+    //criação do arquivo
 
-    if(!(fat =fopen ("arquivo1.bin","wb"))) //abertura do arquivo
+    if(!(arq =fopen ("arquivo.bin","wb")))                     //abertura do arquivo
         printf("Erro na abertura do arquivo \n");
 
     else
     {
-        fwrite(&tam_indice,sizeof(int),1,fat);   //escreve tam do indice
-        fwrite(&tam_cluster,sizeof(int),1,fat);  //escreve tam do cluster
-        fseek(fat,4*sizeof(int),SEEK_SET); // pula tam_indice,tam_cluster,inicio_indice,inicio_root
-        inicio_indice=ftell(fat);           //posição do inicio_indice
-        fseek(fat,2*sizeof(int),SEEK_SET); // volta para inicio_indice para escrever a posição
-        fwrite(&inicio_indice,sizeof(int),1,fat); //escreve onde inicia o indice
-        distancia=(inicio_indice+padrao-1)*sizeof(int); //16+256-1 *8
-        fseek(fat,distancia,SEEK_SET); //inicio_ind +256-1
-        pos_cluster_um=ftell(fat);
-        fseek(fat,3*sizeof(int),SEEK_SET); //retorna ´para a posição de metalinguagem inicio_root
-        fwrite(&pos_cluster_um,sizeof(int),1,fat);  //escreve posição do 1°cluster no arquivo ->inicio_root  e passa para a proxima linha
-        fseek(fat,pos_cluster_um,SEEK_SET); //acha 1°cluter
+        fwrite(&dados,sizeof(METADADOS),1,arq);                    // printa os valores de metadado que são: 256 (de 0 a 255) , 4,0, 32768
 
-        for (i=0;i<padrao;i++){     //qntidade de clusters
-            for (j=0;j<tam_cluster;j++) // cada cluster
+
+        for (i=0;i<padrao;i++){                                 //qntidade de clusters
+            for (j=0;j<tamanho_cluster;j++)                         // cada cluster
             {
-                fwrite(&val,sizeof(int),1,fat); //printa o valor zero de todos os clusters para determinar o tamanho máx do arquivo
+                fwrite(&val,sizeof(char),1,arq);                 //printa o valor zero de todos os clusters para determinar o tamanho máx do arquivo
             }
         }
     }
-    fclose(fat); // fecha arquivo
+    fclose(arq); // fecha arquivo
+}
 
+
+void le_metadados(FILE* arq){
+    int i,j;
+    char val=0;
+    METADADOS leitura;
+
+    //criação do arquivo
+
+    if(!(arq =fopen ("arquivo.bin","rb")))                     //abertura do arquivo
+        printf("Erro na abertura do arquivo \n");
+
+    else
+        fread(&leitura,sizeof(METADADOS),1,arq);
+
+    printf("%d %d %d %d \n",leitura.tam_indice,leitura.tam_cluster, leitura.inicio_indice,leitura.inicio_root); // le tam_indice como -1 pois está em complemento de 2 (=255)
+
+    fclose(arq); // fecha arquivo
+}
+
+
+int main(){
+
+    FILE* arq;
+    METADADOS dados={padrao,tamanho_cluster,inicio_ind,pos_root};
+
+   cria_arquivo(dados, arq);
+   //le_metadados(arq);
 }
