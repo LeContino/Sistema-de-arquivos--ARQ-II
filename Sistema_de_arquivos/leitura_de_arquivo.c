@@ -33,40 +33,13 @@ typedef struct metadados
 
 } METADADOS;
 
-typedef struct
+typedef struct clmeta
 {
-    ITEM *array;
-    size_t used;
-    size_t size;
-} Array;
+    int ponto;
+    int pontoponto;
+} clmeta;
 
-void initArray(Array *a)
-{
-    a->array = malloc(sizeof(ITEM));
-    a->used = 0;
-    a->size = sizeof(ITEM);
-}
-
-void insertArray(Array *a, ITEM element)
-{
-    // a->used is the number of used entries, because a->array[a->used++] updates a->used only *after* the array has been accessed.
-    // Therefore a->used can go up to a->size
-    if (a->used == a->size)
-    {
-        a->size *= 2;
-        a->array = realloc(a->array, a->size * sizeof(ITEM));
-    }
-    a->array[a->used++] = element;
-}
-
-void freeArray(Array *a)
-{
-    free(a->array);
-    a->array = NULL;
-    a->used = a->size = 0;
-}
-
-char readFat(int cluster){
+readFat(int cluster){
 
 };
 void writeFat(int cluster, char content){
@@ -127,41 +100,43 @@ void le_metadados(FILE *arq)
 
 ITEM *readFolderContent(FILE *arq)
 {
-    //0 - 1101010100101101001
-    //hF    p/a    end1  end2        ( Nome )
+    fseek(arq, sizeof(clmeta), SEEK_CUR);
     // fread (void *buffer, int numero_de_bytes, int count, FILE *fp);
 
     ITEM arr[256];
-    ITEM *i;
+    ITEM i;
     bool t = 1;
-    int tt = 0;
 
     //printf("posição chegada: %d \n", ftell(arq));
     while (t)
     {
-        fseek(arq, 1, SEEK_CUR);
-        printf("%i\n", tt);
-        tt += 1;
-        printf("%d\n", ftell(arq));
-        fread(i, sizeof(ITEM), 1, arq);
-        printf('%s\n', i->nome);
-        //printf("ler_bit: %d \n", i->ler_bit);
-        //printf("posição apos leitura: %d \n", ftell(arq));
-        if (!(i->ler_bit) /*|| (i > clusterSize / sizeof(ITEM))*/)
-        {
-            printf("acabou os itens\n");
-            t = 0;
-            fseek(arq, -(sizeof(ITEM)), SEEK_CUR);
-        }
+        printf("inicio da leitura: %d\n", ftell(arq));
+        fread(&i, sizeof(ITEM), 1, arq);
+        printf("eh pasta bit: %i \n", i.eh_pasta_bit);
+        printf("nome: %s \n", i.nome);
+        printf("ponteiro: %d \n", i.ponteiro);
+        //printf('%s\n', i.nome);
 
-        else
-        {
-            printf('%s\n', i->nome);
-            arr[0].eh_pasta_bit = i->eh_pasta_bit;
-            arr[0].ler_bit = i->ler_bit;
-            strcpy(arr[0].nome, i->nome);
-            arr[0].ponteiro = i->ponteiro;
-        }
+        t = 0;
+
+        //printf("ler_bit: %d \n", i->ler_bit);
+        printf("posição apos leitura: %d \n", ftell(arq));
+
+        // if (!(i.ler_bit) /*|| (i > clusterSize / sizeof(ITEM))*/)
+        // {
+        //     printf("acabou os itens\n");
+        //     t = 0;
+        //     fseek(arq, -(sizeof(ITEM)), SEEK_CUR);
+        // }
+
+        // else
+        // {
+        //     printf('%s\n', i.nome);
+        //     arr[0].eh_pasta_bit = i.eh_pasta_bit;
+        //     arr[0].ler_bit = i.ler_bit;
+        //     strcpy(arr[0].nome, i.nome);
+        //     arr[0].ponteiro = i.ponteiro;
+        // }
     }
 
     return &arr;
@@ -194,8 +169,11 @@ void writeItemInFolderCluster(FILE *arq, int cluster, ITEM item)
 
 void writeItemInCurrFolder(FILE *arq, ITEM *item)
 {
+    fseek(arq, sizeof(clmeta), SEEK_CUR);
     ITEM *i;
     bool t = 1;
+    int clusteratual = (ftell(arq) - 263) / clusterSize;
+    printf("cluster atual : %i \n", clusteratual);
 
     //printf("posição chegada: %d \n", ftell(arq));
     while (t)
@@ -210,23 +188,52 @@ void writeItemInCurrFolder(FILE *arq, ITEM *item)
         }
     }
 
+    //printf("item nome: %s \n", item->nome);
+
     //printf("posição recuo: %d \n", ftell(arq));
     //(*item).ponteiro = 11; // navegar a fat até achar local para criar a pasta/item
+    //printf("escrita comecou na posicao: %d \n", ftell(arq));
 
-    fwrite(&item, sizeof(ITEM), 1, arq);
+    fwrite(item, sizeof(ITEM), 1, arq);
 
-    //printf("posição pos escrita: %d \n", ftell(arq));
+    if (item->eh_pasta_bit)
+    {
+        IniciaCluster(arq, clusteratual, i->ponteiro);
+    }
+
+    //printf("escrita terminou na posicao: %d \n", ftell(arq));
 }
 
+//printf("posição pos escrita: %d \n", ftell(arq));
+
+/*}
 void CD(FILE *arq, char *comando)
+    /* ITEM *folderItems = readFolderContent(arq);/
+ra                                          //    eadfFldercCntent\()// }
+
+*/
+
+void IniciaCluster(FILE *arq, int anterior, int novo)
 {
+    goToCluster(arq, novo);
+    //. ..
+    fwrite(&novo, sizeof(int), 1, arq);
+    fwrite(&anterior, sizeof(int), 1, arq);
+
+    return;
 }
 
 void DIR(FILE *arq)
 {
 }
 
-void RM() {}
+/*
+void RM(FILE *arq)
+// cuidar deixar o ler bit 1 se for remover uma pasta ou arquivo, apagar tudo quando for file
+{
+    
+}
+*/
 
 // void MKDIR(FILE *arq, char *name)
 // {
@@ -261,23 +268,25 @@ void MKFILE() {}
 //                 fwrite(&item, sizeof(ITEM), 1, arq);
 //             }
 //         }
-//         i += 1;
-//     }
+
+// i += 1;
+// // }
+// FILE *arq, //
+//char *namet//   / /,void MOextVE() {}
+//     //
+//     void EDIT()
+// {
 // }
 
-void MOVE() {}
-
-void EDIT() {}
-
-void interfaceLoop()
-{
-    while (1)
-    {
-        printf(">>>>>>>>> ");
-        scanf("%s");
-        //string stroke
-    }
-}
+// void interfaceLoop()
+// {
+//     while (1)
+//     {
+//         printf(">>>>>>>>> ");
+//         scanf("%s");
+//         //string stroke
+//     }
+// }
 
 int main()
 {
@@ -297,7 +306,7 @@ int main()
     item = malloc(sizeof(ITEM));
     item->ler_bit = true;
     item->eh_pasta_bit = true;
-    item->ponteiro = 255;
+    item->ponteiro = 2;
     strcpy(item->nome, "Item1");
     writeItemInCurrFolder(arq, item);
 
