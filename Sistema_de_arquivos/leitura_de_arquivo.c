@@ -6,7 +6,6 @@
 #define clusterSize 32768
 #define indiceStart 8 // 1 byte tam do indice, 2 bytes tam do cluster, 2 bytes inicio do indice, 2 bytes inicio root  -> prox byte � posicao do indice
 #define rootPos 263   // 7 bytes posteriores +256 bytes de indice
-
 //Nome    Valor       Significado
 //SEEK_SET       0        Início do arquivo
 //SEEK_CUR       1        Ponto corrente no arquivo
@@ -103,43 +102,45 @@ ITEM *readFolderContent(FILE *arq)
     fseek(arq, sizeof(clmeta), SEEK_CUR);
     // fread (void *buffer, int numero_de_bytes, int count, FILE *fp);
 
-    ITEM arr[256];
+    static ITEM arr[256];
     ITEM i;
+    int x = 0;
     bool t = 1;
 
     //printf("posição chegada: %d \n", ftell(arq));
     while (t)
     {
-        printf("inicio da leitura: %d\n", ftell(arq));
+        //printf("inicio da leitura: %d\n", ftell(arq));
         fread(&i, sizeof(ITEM), 1, arq);
-        printf("eh pasta bit: %i \n", i.eh_pasta_bit);
-        printf("nome: %s \n", i.nome);
-        printf("ponteiro: %d \n", i.ponteiro);
+        //printf("eh pasta bit: %i \n", i.eh_pasta_bit);
+
+        //printf("nome: %s \n", i.nome);
+        //printf("ponteiro: %d \n", i.ponteiro);
         //printf('%s\n', i.nome);
 
-        t = 0;
-
         //printf("ler_bit: %d \n", i->ler_bit);
-        printf("posição apos leitura: %d \n", ftell(arq));
+        //printf("posição apos leitura: %d \n", ftell(arq));
 
-        // if (!(i.ler_bit) /*|| (i > clusterSize / sizeof(ITEM))*/)
-        // {
-        //     printf("acabou os itens\n");
-        //     t = 0;
-        //     fseek(arq, -(sizeof(ITEM)), SEEK_CUR);
-        // }
+        /*|| (i > clusterSize / sizeof(ITEM))*/
 
-        // else
-        // {
-        //     printf('%s\n', i.nome);
-        //     arr[0].eh_pasta_bit = i.eh_pasta_bit;
-        //     arr[0].ler_bit = i.ler_bit;
-        //     strcpy(arr[0].nome, i.nome);
-        //     arr[0].ponteiro = i.ponteiro;
-        // }
+        if (!i.ler_bit)
+        {
+            //printf("acabou os itens\n");
+            t = 0;
+            fseek(arq, -(sizeof(ITEM)), SEEK_CUR);
+        }
+
+        else
+        {
+            arr[x].eh_pasta_bit = i.eh_pasta_bit;
+            arr[x].ler_bit = i.ler_bit;
+            strcpy(arr[x].nome, i.nome);
+            arr[x].ponteiro = i.ponteiro;
+            x += 1;
+        }
     }
 
-    return &arr;
+    return arr;
 }
 
 void goToCluster(FILE *arq, int n)
@@ -148,9 +149,9 @@ void goToCluster(FILE *arq, int n)
     int fatTableDesloc = pattern;
     int clusterDesloc = (n * clusterSize) / 8;
     int desloc = metadataDesloc + fatTableDesloc + clusterDesloc;
-    printf("desloc: %d \n", desloc);
+    //printf("desloc: %d \n", desloc);
     fseek(arq, desloc, SEEK_SET); //deslocamento medido em bytes
-    printf("going to cluster %d \n", n);
+    //printf("going to cluster %d \n", n);
 }
 
 void writeItemInFolderCluster(FILE *arq, int cluster, ITEM item)
@@ -173,7 +174,7 @@ void writeItemInCurrFolder(FILE *arq, ITEM *item)
     ITEM *i;
     bool t = 1;
     int clusteratual = (ftell(arq) - 263) / clusterSize;
-    printf("cluster atual : %i \n", clusteratual);
+    //printf("cluster atual : %i \n", clusteratual);
 
     //printf("posição chegada: %d \n", ftell(arq));
     while (t)
@@ -189,7 +190,6 @@ void writeItemInCurrFolder(FILE *arq, ITEM *item)
     }
 
     //printf("item nome: %s \n", item->nome);
-
     //printf("posição recuo: %d \n", ftell(arq));
     //(*item).ponteiro = 11; // navegar a fat até achar local para criar a pasta/item
     //printf("escrita comecou na posicao: %d \n", ftell(arq));
@@ -225,28 +225,78 @@ void IniciaCluster(FILE *arq, int anterior, int novo)
 
 void DIR(FILE *arq)
 {
+    ITEM *folderItens = readFolderContent(arq);
+
+    int x = folderItens[0].ler_bit;
+    int i = 0;
+
+    printf(">>>>>>>>> ");
+
+    while (x)
+    {
+        printf("%s ", folderItens[i].nome);
+        i += 1;
+        x = folderItens[i].ler_bit;
+    }
+
+    printf("\n");
 }
 
 /*
-void RM(FILE *arq)
-// cuidar deixar o ler bit 1 se for remover uma pasta ou arquivo, apagar tudo quando for file
+void RM(FILE *arq, char *name)
 {
+    // Limpa um arquivo ou diretorio
+    // Limpa a tabela FAT
+    // Limpa a diretorio parente
+
+    ITEM *parentFolderItems = readFolderContent(arq); // Pega os itens do parente
+    ITEM lixo;
+    
+    i = 0 // Acha a posição do arquivo que deve ser removido
+    while(strcmp(parentFolderItems[i].nome, name))
+    {
+        i++;
+    }
+    
+    int freePlace = i*sizeof(ITEM) + sizeof(clmeta); // Calcula posição do item que será removido
+    fseek(arq, desloc, SEEK_CUR); // Vai até o item que será removido
+    
+    // while(parentFolderItems[i].ler_bit) // Procura pelo próximo item que possa vir para a posição livre
+    // {
+    //    i++;
+    // }
+    // i--;
+    
+    fread(son, sizeof(ITEM), 1, arq);
+    
+    
     
 }
 */
 
-// void MKDIR(FILE *arq, char *name)
+void MKDIR(FILE *arq, char *name)
+{
+    ITEM temp;
+    temp.ler_bit = 1;
+    temp.eh_pasta_bit = 1;
+    strcpy(temp.nome, name);
+
+    writeItemInCurrFolder(arq, &temp);
+}
+
+// void MKFILE(FILE *arq, )
 // {
-//     ITEM *temp;
-
-//     (*temp).ler_bit = 1;
-//     (*temp).eh_pasta_bit = 1;
-//     strcpy(temp.nome, name);
-
-//     writeItemInCurrFolder(arq, &temp);
+//     ITEM *item;
+//     item = malloc(sizeof(ITEM));
+//     item->ler_bit = true;
+//     item->eh_pasta_bit = false;
+//     item->ponteiro = 2;
+//     strcpy(item->nome, "TESTE");
+//     writeItemInCurrFolder(arq, item);
 // }
-
-void MKFILE() {}
+void EDIT()
+{
+}
 
 // void RENAME(FILE *arq, char *name, char *newname)
 // {
@@ -273,10 +323,6 @@ void MKFILE() {}
 // // }
 // FILE *arq, //
 //char *namet//   / /,void MOextVE() {}
-//     //
-//     void EDIT()
-// {
-// }
 
 // void interfaceLoop()
 // {
@@ -288,9 +334,27 @@ void MKFILE() {}
 //     }
 // }
 
+// retorna de 1 a 256
+int analisa_fat(FILE *arq)
+{
+    char preenchimento;
+    int indice = 1;
+
+    fseek(arq, (8 * sizeof(char)), SEEK_SET); // va para byte 8 -> inicio do indice
+
+    fread(&preenchimento, sizeof(char), 1, arq);
+
+    while (preenchimento != 0)
+    {
+        fread(&preenchimento, sizeof(char), 1, arq);
+        indice++;
+    }
+
+    return indice;
+}
+
 int main()
 {
-
     FILE *arq;
     METADADOS dados = {pattern, clusterSize, indiceStart, rootPos};
 
@@ -298,31 +362,37 @@ int main()
 
     arq = fopen("arquivo.bin", "r+");
 
-    printf("#1\n");
     goToCluster(arq, 0);
+    printf("\n");
 
-    printf("#2\n");
     ITEM *item;
     item = malloc(sizeof(ITEM));
     item->ler_bit = true;
     item->eh_pasta_bit = true;
     item->ponteiro = 2;
-    strcpy(item->nome, "Item1");
+    strcpy(item->nome, "TESTE");
     writeItemInCurrFolder(arq, item);
 
-    printf("#3\n");
+    item->ler_bit = true;
+    item->eh_pasta_bit = true;
+    item->ponteiro = 33;
+    strcpy(item->nome, "Item123232");
+
     goToCluster(arq, 0);
+    printf("\n");
+
+    writeItemInCurrFolder(arq, item);
+
+    goToCluster(arq, 0);
+    printf("\n");
+
+    DIR(arq);
+
     printf("#4\n");
-    ITEM *folderItems = readFolderContent(arq);
-    printf("#5\n");
-    printf("nome: %s \n", (folderItems[0]).nome);
+
+    // ITEM *folderItens = readFolderContent(arq);
+    //printf("nome: %s \n", folderItens[0].nome);
+    printf("Fat: %d", analisa_fat(arq));
 
     fclose(arq);
-
-    // [ 1010000000000000000000000010 ]
-    // se for pasta na hora de criar item no diretorio atual -> entrar no cluster da pasta e inicializar pasta (., ..)
-
-    //interfaceLoop();
-
-    //le_metadados(arq);
 }

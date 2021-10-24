@@ -1,0 +1,30 @@
+CD 
+
+DIR
+ - Lucas
+
+RM
+- Henrique
+
+MKDIR
+
+
+MKFILE
+- Gabriel
+- 
+
+EDIT
+- Gabriel
+- 
+
+MOVE
+
+
+RENAME
+
+
+INTERFACE
+- Gabriel
+- Ok
+- Historico de comando (Melhoria)
+

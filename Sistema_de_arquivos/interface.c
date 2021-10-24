@@ -5,62 +5,77 @@
 
 void interfaceHandleCommand(char *command)
 {
-    char *token;
-    const char breakChar[2] = " ";
+    char *commandName;
+    const char breakChar[1] = " ";
 
-    token = strtok(command, breakChar);
+    commandName = strtok(command, breakChar);
 
-    if (token == "CD")
+    if (!strcmp(commandName, "CD"))
     {
-        token = strtok(NULL, breakChar);
+        printf("%s\n", commandName);
 
-        char *folderDir = token;
-
-        token = strtok(NULL, breakChar);
-        if (token != NULL)
+        char *folderDir = strtok(NULL, breakChar);
+        if (folderDir == NULL)
         {
             printf("One parameter expected for this command\n");
+            return;
         }
+
+        printf("%s\n", folderDir);
+
+        char *invalidParameter = strtok(NULL, breakChar);
+        if (invalidParameter != NULL)
+        {
+            printf("One parameter expected for this command\n");
+            return;
+        }
+
+        printf("call cd function with %s \n", folderDir);
+
+        // CALL CD FUNCTION
+
         return;
     }
-    //strcmp()
-    if (token == "DIR")
+
+    if (!strcmp(commandName, "DIR"))
+    {
+
+        // CALL DIR FUNCTION
+
+        return;
+    }
+
+    if (!strcmp(commandName, "RM"))
     {
 
         return;
     }
 
-    if (token == "RM")
+    if (!strcmp(commandName, "MKDIR"))
     {
 
         return;
     }
 
-    if (token == "MKDIR")
+    if (!strcmp(commandName, "MKFILE"))
     {
 
         return;
     }
 
-    if (token == "MKFILE")
+    if (!strcmp(commandName, "EDIT"))
     {
 
         return;
     }
 
-    if (token == "EDIT")
+    if (!strcmp(commandName, "MOVE"))
     {
 
         return;
     }
 
-    if (token == "MOVE")
-    {
-
-        return;
-    }
-
-    if (token == "RENAME")
+    if (!strcmp(commandName, "RENAME"))
     {
 
         return;
@@ -76,13 +91,10 @@ void interfaceLoop()
     {
         printf(">>>>>>>>> ");
         char *command;
-        fgets(command, 500, stdin);
-        printf("READ: %s", command);
+        fgets(command, 1024000, stdin);
+        // printf("READ: %s", command);
 
-        // if (command[0] != '\0')
-        // {
         interfaceHandleCommand(command);
-        // }
     }
 }
 
