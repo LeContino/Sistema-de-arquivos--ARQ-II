@@ -12,7 +12,7 @@ void interfaceHandleCommand(char *command)
 
     if (!strcmp(commandName, "CD"))
     {
-        printf("%s\n", commandName);
+        // printf("%s\n", commandName);
 
         char *folderDir = strtok(NULL, breakChar);
         if (folderDir == NULL)
@@ -21,7 +21,7 @@ void interfaceHandleCommand(char *command)
             return;
         }
 
-        printf("%s\n", folderDir);
+        // printf("%s\n", folderDir);
 
         char *invalidParameter = strtok(NULL, breakChar);
         if (invalidParameter != NULL)
@@ -30,9 +30,9 @@ void interfaceHandleCommand(char *command)
             return;
         }
 
-        printf("call cd function with %s \n", folderDir);
+        // printf("call cd function with %s \n", folderDir);
 
-        // CALL CD FUNCTION
+        // CD(arq,dir);
 
         return;
     }
@@ -40,7 +40,14 @@ void interfaceHandleCommand(char *command)
     if (!strcmp(commandName, "DIR"))
     {
 
-        // CALL DIR FUNCTION
+        char *invalidParameter = strtok(NULL, breakChar);
+        if (invalidParameter != NULL)
+        {
+            printf("No parameters expected for this command\n");
+            return;
+        }
+
+        // DIR(arq);
 
         return;
     }
@@ -53,6 +60,25 @@ void interfaceHandleCommand(char *command)
 
     if (!strcmp(commandName, "MKDIR"))
     {
+        // printf("%s\n", commandName);
+
+        char *dirName = strtok(NULL, breakChar);
+        if (dirName == NULL)
+        {
+            printf("One parameter expected for this command\n");
+            return;
+        }
+
+        // printf("%s\n", folderDir);
+
+        char *invalidParameter = strtok(NULL, breakChar);
+        if (invalidParameter != NULL)
+        {
+            printf("One parameter expected for this command\n");
+            return;
+        }
+
+        // MKDIR(arq,dirName);
 
         return;
     }
@@ -60,6 +86,20 @@ void interfaceHandleCommand(char *command)
     if (!strcmp(commandName, "MKFILE"))
     {
 
+        char *fileName = strtok(NULL, breakChar);
+        if (fileName == NULL)
+        {
+            printf("One parameter expected for this command\n");
+            return;
+        }
+
+        char *invalidParameter = strtok(NULL, breakChar);
+        if (invalidParameter != NULL)
+        {
+            printf("One parameter expected for this command\n");
+            return;
+        }
+        // MKFILE(arq, fileName)
         return;
     }
 
