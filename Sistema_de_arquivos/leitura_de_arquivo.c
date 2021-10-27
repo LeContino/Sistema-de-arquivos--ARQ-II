@@ -14,13 +14,13 @@
 
 // int fseek (FILE *fp,long numbytes,int origem);
 int currentFolderCluster = 0;
-char currentPath[1024000] = "/";
+char currentPath[maxCharsInFileSystem] = "/";
 
 typedef struct file_folder_item_pattern
 {
     bool ler_bit : 1;      //indica se ha algo para ler
     bool eh_pasta_bit : 1; // indica se e pasta ou arquivo
-    short ponteiro;
+    unsigned char ponteiro;
     char nome[16];
 
 } ITEM;
@@ -37,30 +37,32 @@ typedef struct metadados
 
 typedef struct clmeta
 {
-    int ponto;
-    int pontoponto;
+    int ponto;      // Ponteiro para o cluster atual na FAT
+    int pontoponto; // Ponteiro para o cluster parente na FAT
 } clmeta;
 
-short readFat(FILE *arq, int cluster)
+// unsigned char readFat(FILE *arq, int cluster)
+// {
+//     unsigned char ponteiro;
+//     int startPoint = ftell(arq); // Guarda a posicao inicial no arquivo
+
+//     fseek(arq, ((cluster + 8) * sizeof(char)), SEEK_SET); // va para byte 9 (inicio do indice +1 (pula o zero))+posicao
+//     fread(&ponteiro, sizeof(unsigned char), 1, arq);
+
+//     fseek(arq, startPoint, SEEK_SET); // Retorna a posicao inicial no arquivo
+//     return ponteiro;
+// };
+
+void writeFat(FILE *arq, int cluster, unsigned char content)
 {
-    short ponteiro;
-    //int startPoint = ftell(arq); // Guarda a posicao inicial no arquivo
+    int startPoint = ftell(arq); // Guarda a posicao inicial no arquivo
 
-    fseek(arq, ((cluster + 9) * sizeof(char)), SEEK_SET); // va para byte 9 (inicio do indice +1 (pula o zero))+posicao
-    fread(&ponteiro, sizeof(short), 1, arq);
+    fseek(arq, ((cluster + 8) * sizeof(unsigned char)), SEEK_SET); // va para byte 9 (inicio do indice +1 (pula o zero))+posicao
+    //printf("escrita %d\n", ftell(arq));
+    fwrite(&content, sizeof(unsigned char), 1, arq); // Altera o valor do ponteiro na FAT
+    //printf("apos escrita %d\n", ftell(arq));
 
-    //fseek(arq, startPoint, SEEK_SET); // Retorna a posicao inicial no arquivo
-    return ponteiro;
-};
-
-void writeFat(FILE *arq, int cluster, char content)
-{
-    //int startPoint = ftell(arq); // Guarda a posicao inicial no arquivo
-
-    fseek(arq, ((cluster + 9) * sizeof(char)), SEEK_SET); // va para byte 9 (inicio do indice +1 (pula o zero))+posicao
-    fwrite(&content, sizeof(char), 1, arq);
-
-    //fseek(arq, startPoint, SEEK_SET); // Retorna a posicao inicial no arquivo
+    fseek(arq, startPoint, SEEK_SET); // Retorna a posicao inicial no arquivo
 };
 
 short *busca_arquivo_pasta(FILE *arq, char *name)
@@ -92,7 +94,7 @@ short *busca_arquivo_pasta(FILE *arq, char *name)
 
 void apagaCluster(FILE *arq) // Apaga o cluster atual
 {
-    //int startPoint = ftell(arq); // Guarda a posicao inicial no arquivo
+    int startPoint = ftell(arq); // Guarda a posicao inicial no arquivo
 
     int i, val = 0;
     for (i = 0; i < clusterSize / 8; i++)
@@ -100,7 +102,7 @@ void apagaCluster(FILE *arq) // Apaga o cluster atual
         fwrite(&val, sizeof(char), 1, arq);
     }
 
-    //fseek(arq, startPoint, SEEK_SET); // Retorna a posicao inicial no arquivo
+    fseek(arq, startPoint, SEEK_SET); // Retorna a posicao inicial no arquivo
 };
 
 void cria_arquivo(METADADOS dados, FILE *arq)
@@ -117,8 +119,8 @@ void cria_arquivo(METADADOS dados, FILE *arq)
         fwrite(&dados, sizeof(METADADOS), 1, arq); // printa os valores de metadado que sao: 256 (de 0 a 255) , 4,0, 32768
         int numberOfClusters = pattern;
 
-        for (i = 0; i < numberOfClusters; i++)
-        { //qntidade de clusters
+        for (i = 0; i < numberOfClusters; i++) // apaga os clusters
+        {
             apagaCluster(arq);
         }
     }
@@ -144,18 +146,32 @@ void le_metadados(FILE *arq)
     fclose(arq); // fecha arquivo
 }
 
+void goToCluster(FILE *arq, int n) // Recebe o arquivo e o ponteiro para o cluster
+{
+    int x = n + 1;
+    int clusterDesloc = ((x * clusterSize) / 8);
+    clusterDesloc -= clusterSize / 8;
+    int desloc = clusterDesloc + rootPos;
+    //printf("%i \n", desloc);
+    //printf("desloc: %d \n", desloc);
+    fseek(arq, desloc, SEEK_SET); //deslocamento medido em bytes
+    printf("\0");
+    printf("going to cluster %d posicao %d \n", n, ftell(arq));
+}
+/*
 void goToCluster(FILE *arq, int n)
 {
     int x = n + 1;
     int clusterDesloc = ((x * clusterSize) / 8);
     clusterDesloc -= clusterSize / 8;
-    int trashIndex = clusterDesloc + rootPos;
-    //printf("%i \n", trashIndex);
-    //printf("trashIndex: %d \n", trashIndex);
-    fseek(arq, trashIndex, SEEK_SET); //deslocamento medido em bytes
+    int desloc = clusterDesloc + rootPos;
+    //printf("%i \n", desloc);
+    //printf("desloc: %d \n", desloc);
+    fseek(arq, desloc, SEEK_SET); //deslocamento medido em bytes
     printf("\0");
-    printf("going to cluster %d \n", n);
+    //printf("going to cluster %d \n", n);
 }
+*/
 
 // p = 0
 // a = 1
@@ -176,26 +192,32 @@ void IniciaCluster(FILE *arq, int anterior, int novo)
     return;
 }
 
-int analisa_fat(FILE *arq)
+unsigned char analisa_fat(FILE *arq)
 {
-    char preenchimento;
-    int indice = 1;
+    unsigned char preenchimento;
+    short indice = 1;
 
-    //int startPoint = ftell(arq); // Guarda a posicao inicial no arquivo
+    int startPoint = ftell(arq); // Guarda a posicao inicial no arquivo
 
-    fseek(arq, (9 * sizeof(char)), SEEK_SET); // va para byte 9 -> inicio do indice +1 (pula o zero)
+    fseek(arq, (9 * sizeof(unsigned char)), SEEK_SET); // va para byte 9 -> inicio do indice +1 (pula o zero)
 
-    fread(&preenchimento, sizeof(char), 1, arq);
+    //printf("leitura %d\n", ftell(arq));
+    fread(&preenchimento, sizeof(unsigned char), 1, arq);
+    // printf("prencimento : %i\n", preenchimento);
+    //printf("\n charrr  \n", preenchimento);
 
-    printf("\n charrr %s \n", preenchimento);
-
-    while (!(preenchimento == '\0') && indice <= 254) //não vai para 255 pois este indica arquivo corrompido
+    while (((int)preenchimento != 0) && indice <= 254) //não vai para 255 pois este indica arquivo corrompido
     {
-        fread(&preenchimento, sizeof(char), 1, arq);
+        //printf("leitura %d\n", ftell(arq));
+        fread(&preenchimento, sizeof(unsigned char), 1, arq);
         indice++;
+        //printf("prenchimento :%i\n", preenchimento);
+        //printf("indice :%i\n\n", indice);
     }
 
-    //fseek(arq, startPoint, SEEK_SET); // Retorna a posicao inicial no arquivo
+    //printf("leitura %d\n", (ftell(arq) - 8) / sizeof(unsigned char));
+
+    fseek(arq, startPoint, SEEK_SET); // Retorna a posicao inicial no arquivo
     return indice;
 }
 
@@ -207,10 +229,11 @@ ITEM *readFolderContent(FILE *arq)
     vazio.ponteiro = 0;
     strcpy(vazio.nome, "");
 
-    //int startPoint = ftell(arq); // Guarda a posicao inicial no arquivo
-    int volta = ftell(arq);
+    int startPoint = ftell(arq); // Guarda a posicao inicial no arquivo
+
     //printf("chegou na read com posicao %i\n", volta);
     fseek(arq, sizeof(clmeta), SEEK_CUR);
+    printf("Ta lendo na pos: %d\n", ftell(arq));
     // fread (void *buffer, int numero_de_bytes, int count, FILE *fp);
     int texx;
     static ITEM arr[256];
@@ -223,11 +246,12 @@ ITEM *readFolderContent(FILE *arq)
     ITEM i;
     int x = 0;
     bool t = 1;
-
+    //printf("leitura pos: %d\n", ftell(arq));
     //printf("posição chegada: %d \n", ftell(arq));
     while (t)
     {
         //printf("inicio da leitura: %d\n", ftell(arq));
+
         fread(&i, sizeof(ITEM), 1, arq);
         //printf("eh pasta bit: %i \n", i.eh_pasta_bit);
 
@@ -257,40 +281,42 @@ ITEM *readFolderContent(FILE *arq)
         }
     }
 
-    //fseek(arq, startPoint, SEEK_SET); // Retorna a posicao inicial no arquivo
-    fseek(arq, volta, SEEK_SET);
+    fseek(arq, startPoint, SEEK_SET); // Retorna a posicao inicial no arquivo
 
     return arr;
 }
 
-void writeItemInFolderCluster(FILE *arq, int cluster, ITEM item)
-{
-    //int startPoint = ftell(arq); // Guarda a posicao inicial no arquivo
+// void writeItemInFolderCluster(FILE *arq, int cluster, ITEM item)
+// {
+//     int startPoint = ftell(arq); // Guarda a posicao inicial no arquivo
 
-    goToCluster(arq, cluster);
-    bool *i;
+//     goToCluster(arq, cluster);
+//     bool *i;
 
-    while (i)
-    {
-        fread(i, sizeof(bool), 1, arq);
-        fseek(arq, (7 * sizeof(bool)), SEEK_CUR);
-    }
+//     while (i)
+//     {
+//         fread(i, sizeof(bool), 1, arq);
+//         fseek(arq, (7 * sizeof(bool)), SEEK_CUR);
+//     }
 
-    fwrite(&item, sizeof(ITEM), 1, arq);
+//     fwrite(&item, sizeof(ITEM), 1, arq);
 
-    //fseek(arq, startPoint, SEEK_SET); // Retorna a posicao inicial no arquivo
-}
+//     fseek(arq, startPoint, SEEK_SET); // Retorna a posicao inicial no arquivo
+//}
 
 void writeItemInCurrFolder(FILE *arq, ITEM *item)
 {
+    printf("Chega na write : %d\n", ftell(arq));
+    fseek(arq, ftell(arq) - ((ftell(arq) - rootPos) % (clusterSize / 8)), SEEK_SET); // Volta para o inicio do cluster
+    printf("Corrige : %d\n", ftell(arq));
+    int startPoint = ftell(arq); // Guarda a posicao inicial no arquivo
+
     ITEM *i;
     i = malloc(sizeof(ITEM));
 
-    //int startPoint = ftell(arq); // Guarda a posicao inicial no arquivo
-    long volta = ftell(arq);
-
     bool t = 1;
     int clusteratual = (ftell(arq) - rootPos) / clusterSize;
+    int ttttt = ftell(arq);
     fseek(arq, sizeof(clmeta), SEEK_CUR); // pula metadados
     int fatpos = 0;
     long posant = 0;
@@ -298,12 +324,11 @@ void writeItemInCurrFolder(FILE *arq, ITEM *item)
 
     fread(i, sizeof(ITEM), 1, arq);
 
-    t = i->ler_bit;
-
     //printf("posição chegada: %d \n", ftell(arq));
+    t = i->ler_bit;
     while (t) // Acha a primeira posição onde não tem um item escrito
     {
-        t += 1;
+        ttttt = ftell(arq);
         fread(i, sizeof(ITEM), 1, arq);
         t = i->ler_bit;
     }
@@ -314,9 +339,9 @@ void writeItemInCurrFolder(FILE *arq, ITEM *item)
     // if (!(i->ler_bit) /*|| (i > clusterSize / sizeof(ITEM))*/)
     // {
     //     t = 0;
+    //fseek(arq, -(sizeof(ITEM)), SEEK_CUR);
 
-    fseek(arq, -(sizeof(ITEM)), SEEK_CUR);
-
+    fseek(arq, ttttt, SEEK_CUR);
     //printf("item nome: %s \n", item->nome);
     //printf("posição recuo: %d \n", ftell(arq));
     //(*item).ponteiro = 11; // navegar a fat até achar local para criar a pasta/item
@@ -327,8 +352,9 @@ void writeItemInCurrFolder(FILE *arq, ITEM *item)
 
     // acha cluster fat
     fatpos = analisa_fat(arq);
+    printf("fatpos : %d", fatpos);
 
-    printf("%i", fatpos);
+    //printf("%i", fatpos);
 
     item->ponteiro = fatpos;
 
@@ -338,6 +364,7 @@ void writeItemInCurrFolder(FILE *arq, ITEM *item)
         IniciaCluster(arq, clusteratual, fatpos);
         writeFat(arq, fatpos, fatpos);
         fseek(arq, posant, SEEK_SET);
+        printf("escreve na pos: %d\n", ftell(arq));
         fwrite(item, sizeof(ITEM), 1, arq);
     }
 
@@ -345,14 +372,15 @@ void writeItemInCurrFolder(FILE *arq, ITEM *item)
     else
     {
         //fseek(arq, (9 * sizeof(char) + (fatpos * sizeof(char))), SEEK_SET);
-        //fwrite(&item->ponteiro, sizeof(short), 1, arq);
+        //fwrite(&item->ponteiro, sizeof(unsigned char), 1, arq);
         writeFat(arq, fatpos, fatpos);
         fseek(arq, posant, SEEK_SET);
         fwrite(item, sizeof(ITEM), 1, arq);
     }
 
     //fseek(arq, startPoint, SEEK_SET); // Retorna a posicao inicial no arquivo
-    fseek(arq, volta, SEEK_SET);
+
+    fseek(arq, ftell(arq) - ((ftell(arq) - rootPos) % (clusterSize / 8)), SEEK_SET); // Volta para o inicio do cluster
 
     //printf("final da write");
     //goToCluster(arq, clusteratual);
@@ -362,13 +390,35 @@ void writeItemInCurrFolder(FILE *arq, ITEM *item)
 
 //printf("posição pos escrita: %d \n", ftell(arq));
 
-char *goToFolderAndReturnLastNameOfPath(FILE *arq, char directoryPath[maxCharsInFileSystem])
+void writeInCurrentPath(char *name)
+{
+    int i;
+    if (!strcmp(name, ".."))
+    {
+        strcat(currentPath, name);
+        for (i = 0; i < strlen(currentPath); i++)
+        {
+            if (currentPath[i] == '/')
+            {
+                currentPath[i] = '\0';
+                break;
+            }
+        }
+    }
+    else if (strcmp(name, "."))
+        strcat(currentPath, name);
+}
+
+char *goToFolderAndReturnLastNameOfPath(FILE *arq, char directoryPath[maxCharsInFileSystem], int cd)
 {
     // pastaatual/texto.txt -> texto.txt
     // pastaatual/pasta1/texto.txt -> (vai ir para pasta1) + return texto.txt
     const char breakChar[1] = "/";
     if (directoryPath[0] == breakChar)
+    {
         goToCluster(arq, 0); // absolutePath
+        // strcpy(currentPath, "/");
+    }
     char *currentDir;
     char *lastNameOfPath;
     currentDir = strtok(directoryPath, breakChar);
@@ -389,6 +439,15 @@ char *goToFolderAndReturnLastNameOfPath(FILE *arq, char directoryPath[maxCharsIn
             // printf("%s ", folderItems[i].nome);
             if (!strcmp(folderItems[i].nome, currentDir))
             {
+
+                if (!folderItems[i].eh_pasta_bit)
+                {
+                    printf("%s is not a folder!\n", folderItems[i].nome);
+                    return currentDir;
+                }
+                if (cd)
+                    writeInCurrentPath(folderItems[i].nome);
+
                 goToCluster(arq, folderItems[i].ponteiro);
                 break;
             }
@@ -403,10 +462,8 @@ char *goToFolderAndReturnLastNameOfPath(FILE *arq, char directoryPath[maxCharsIn
 
 void CD(FILE *arq, char directoryPath[maxCharsInFileSystem])
 {
-    //int startPoint = ftell(arq); // Guarda a posicao inicial no arquivo
-
     printf("CD to %s\n", directoryPath);
-    char *lastFolderNameOfPath = goToFolderAndReturnLastNameOfPath(arq, directoryPath);
+    char *lastFolderNameOfPath = goToFolderAndReturnLastNameOfPath(arq, directoryPath, 1);
     ITEM *folderItems = readFolderContent(arq);
     int x = folderItems[0].ler_bit;
     int i = 0;
@@ -415,23 +472,29 @@ void CD(FILE *arq, char directoryPath[maxCharsInFileSystem])
     {
         if (!strcmp(folderItems[i].nome, lastFolderNameOfPath))
         {
+
+            if (!folderItems[i].eh_pasta_bit)
+            {
+                printf("%s is not a folder!\n", folderItems[i].nome);
+                return;
+            }
+            writeInCurrentPath(folderItems[i].nome);
+
             goToCluster(arq, folderItems[i].ponteiro);
-            printf("%s \n", folderItems[i].nome);
-            printf("%i \n", folderItems[i].ponteiro);
+            //printf("%s \n", folderItems[i].nome);
+            //printf("%i \n", folderItems[i].ponteiro);
             break;
         }
         i += 1;
         x = folderItems[i].ler_bit;
     }
-
-    //fseek(arq, startPoint, SEEK_SET); // Retorna a posicao inicial no arquivo
 }
 
-void DIR(FILE *arq)
+void DIR(FILE *arq) // Lista todos os itens que estao na pasta
 {
-    //int startPoint = ftell(arq); // Guarda a posicao inicial no arquivo
-
-    ITEM *folderItens = readFolderContent(arq);
+    int startPoint = ftell(arq); // Guarda a posicao inicial no arquivo
+    printf("Posicao de chamada da dir : %d\n", startPoint);
+    ITEM *folderItens = readFolderContent(arq); // Pega uma lista com todos os itens do folder
 
     int x = folderItens[0].ler_bit;
     int i = 0;
@@ -444,23 +507,26 @@ void DIR(FILE *arq)
         i += 1;
         x = folderItens[i].ler_bit;
     }
+    if (i == 0)
+    {
+        printf("empty folder\n");
+    }
 
     printf("-----------\n");
 
-    //fseek(arq, startPoint, SEEK_SET); // Retorna a posicao inicial no arquivo
+    fseek(arq, startPoint, SEEK_SET); // Retorna a posicao inicial no arquivo
 }
 
 /*
 void RM(FILE *arq, char *name) // recebe um ponteiro para o inicio do folder que contem o item que será removido e o nome deste item
 {
-    //int startPoint = ftell(arq);
-    //fseek(arq, startPoint, SEEK_SET);
+    long startPoint = ftell(arq); // Guarda a posicao inicial no arquivo
       
     int i;
     int trashIndex; // indice na lista de itens na pasta parente do lixo
     int trashPointer; // ponteiro dentro do arquivo para o lixo
 
-    short pAtual, pProx; // ponteiros usados para navegar pelos clusters usados nos .txt
+    unsigned char pAtual, pProx; // ponteiros usados para navegar pelos clusters usados nos .txt
 
     ITEM *parentFolderItems = readFolderContent(arq); // Pega os itens do parente
     ITEM trash; // Item do lixo
@@ -525,26 +591,41 @@ void RM(FILE *arq, char *name) // recebe um ponteiro para o inicio do folder que
     }
     
     fseek(arq, trashPointer, SEEK_SET); // Volta para o item que deve ser apagado
-    
-    while(parentFolderItems[i+1].ler_bit) // Procura pelo ultimo item da pasta
-    {
-        i++;
-    }
 
-    if (i != trashIndex) // Testa se foi achado um item além do lixo
+    void removeItemFromCurrentCluster(FILE *arq, char *name)
     {
-        fseek(arq, (i-trashIndex-1)*sizeof(ITEM), SEEK_CUR) // Vai ate o ultimo item 
-        fread(&lastOne, sizeof(ITEM), 1, arq); // Le o ultimo item do arquivo
-        fwrite(vazio, sizeof(ITEM), 1, arq-sizeof(ITEM)); // Apaga o ultimo item da pasta
+        ITEM *FolderItems = readFolderContent(arq); // Pega os itens do parente
 
-        fseek(arq, trashPointer, SEEK_SET) // Volta até o lixo
-        fwrite(lastOne, sizeof(ITEM), 1, arq); // Subscreve o lixo
+        int i = 0; // Acha o indice do item do arquivo que deve ser removido
+        while(!strcmp(parentFolderItems[i].nome, name))
+        {
+            i++;
+        }
+        trashItemIndex = i;
+        
+        while(parentFolderItems[i+1].ler_bit) // Procura pelo ultimo item da pasta
+        {
+            i++;
+        }
+
+        if (i != trashItemIndex) // Testa se foi achado um item além do lixo
+        {
+            fseek(arq, trashItemIndex*sizeof(ITEM), SEEK_CUR) // Vai ate o ultimo item 
+            fread(&lastOne, sizeof(ITEM), 1, arq); // Le o ultimo item do arquivo
+            fwrite(vazio, sizeof(ITEM), 1, arq-sizeof(ITEM)); // Apaga o ultimo item da pasta
+
+            fseek(arq, trashPointer, SEEK_SET) // Volta até o lixo
+            fwrite(lastOne, sizeof(ITEM), 1, arq); // Subscreve o lixo
+        }
+        else
+        {
+            fwrite(vazio, sizeof(ITEM), 1, arq); // Apaga o item do arquivo removido
+        }
+        
     }
-    else
-    {
-        fwrite(vazio, sizeof(ITEM), 1, arq); // Apaga o item do arquivo removido
-    }
+    removeItemFromCurrentCluster(arq, name);
     
+    fseek(arq, startPoint, SEEK_SET); // Retorna a posicao inicial no arquivo
 }
 */
 
@@ -558,23 +639,33 @@ void MKDIR(FILE *arq, char *name)
     writeItemInCurrFolder(arq, temp);
 }
 
-void MKFILE(FILE *arq, char fileName[16])
+void MKFILE(FILE *arq, char *name)
 {
-    ITEM *item;
-    item = malloc(sizeof(ITEM));
-    item->ler_bit = true;       //true
-    item->eh_pasta_bit = false; //false
-    item->ponteiro = 0;
-    strcpy(item->nome, fileName);
-    writeItemInCurrFolder(arq, item);
+    ITEM *temp = malloc(sizeof(ITEM));
+    temp->ler_bit = true;
+    temp->eh_pasta_bit = false;
+    strcpy(temp->nome, name);
+    //printf("%s", temp->nome);
+    writeItemInCurrFolder(arq, temp);
 }
+
+// void MKFILE(FILE *arq, char fileName[16])
+// {
+//     ITEM *item;
+//     item = malloc(sizeof(ITEM));
+//     item->ler_bit = true;       //true
+//     item->eh_pasta_bit = false; //false
+//     item->ponteiro = 0;
+//     strcpy(item->nome, fileName);
+//     writeItemInCurrFolder(arq, item);
+// }
 
 void EDIT(FILE *arq, char fileDir[maxCharsInFileSystem], char fileContent[maxCharsInFileSystem])
 {
 
     /*
     int startPoint = ftell(arq); // Guarda a posicao inicial no arquivo
-    char *fileName = goToFolderAndReturnLastNameOfPath(fileDir);
+    char *fileName = goToFolderAndReturnLastNameOfPath(arq,fileDir,0);
     int fileFolderStartPoint = ftell(arq); // Guarda a posicao inicial no arquivo
     ITEM *folderItems = readFolderContent(arq);
     int x = folderItems[0].ler_bit;
@@ -611,7 +702,7 @@ void EDIT(FILE *arq, char fileDir[maxCharsInFileSystem], char fileContent[maxCha
 
 void RENAME(FILE *arq, char *name, char *newname)
 {
-    //int startPoint = ftell(arq); // Guarda a posicao inicial no arquivo
+    int startPoint = ftell(arq); // Guarda a posicao inicial no arquivo
 
     int i = 0;
     ITEM item;
@@ -635,47 +726,44 @@ void RENAME(FILE *arq, char *name, char *newname)
         }
     }
 
-    //fseek(arq, startPoint, SEEK_SET); // Retorna a posicao inicial no arquivo
+    fseek(arq, startPoint, SEEK_SET); // Retorna a posicao inicial no arquivo
 }
 /*
-void MOVE(FILE *arq, char *name , char *name_destino){
-// copiar arquivo
-// mover para novo diretorio
-// excluir do diretorio antigo
+void MOVE(FILE *arq, char path_origem[maxCharsInFileSystem] , char path_destino[maxCharsInFileSystem]){
 
-
-    char *caminho= "";
-    char *path;
-    int *pos1,*pos2;
-    char ch;
+    ITEM *parentFolderItems = readFolderContent(arq); // Pega os itens do parente
+    i = 0 // Acha o indice do item do arquivo que deve ser removido
+    short clusterAtual;
     ITEM item;
-    int zero=0;
+    char *name;
 
-    path = malloc(sizeof(caminho));
+    *name= goToFolderAndReturnLastNameOfPath(arq,path_origem);
 
-    strcpy(path,caminho);
+    // serch na pasta e acha o item
+    while(!strcmp(parentFolderItems[i].nome, name))
+    {
+        i++;
+    }
 
-    strcat(caminho,name);
-    strcat(caminho,path);
-    strcat(caminho,name_destino);
+    // read cluster que esse item aponta e o tipo
+    clusterAtual= (ftell(arq) - rootPos) / clusterSize;
+    goToCluster(arq,clusterAtual);
+    fread(&item,sizeof(ITEM),1,arq);
 
-    *pos1=busca_arquivo_pasta(arq,name);
-    *pos2=busca_arquivo_pasta(arq,name_destino);
+    *name= goToFolderAndReturnLastNameOfPath(arq,path_destino);
 
-    while ((fread(&ch, sizeof(char), 1, arq)) != EOF)
-       {
-           fseek(arq,pos1,SEEK_SET);
-           fread(&ch, sizeof(char), 1, arq);
-           *pos1=*pos1+ sizeof(char);
-           fwrite(&val, sizeof(char), 1, arq); //escreve zero
-           fseek(arq,pos2,SEEK_SET);
-           fwrite(&ch, sizeof(char), 1, arq);
+    CD(arq,name);
 
+    i=0;
 
-       }
+    while(!strcmp(parentFolderItems[i].nome, name))
+    {
+        i++;
+    }
 
+    clusterAtual= (ftell(arq) - rootPos) / clusterSize;
 
-
+    writeItemInCurrFolder(arq,clusterAtual,item);
 }
 */
 // FILE *arq, //
@@ -697,6 +785,122 @@ void VivaAoC()
     printf("\0");
 }
 
+void interfaceHandleCommand(FILE *arq, char *command)
+{
+    const char breakChar[1] = " ";
+    char *commandName = strtok(command, breakChar);
+    if (!strcmp(commandName, "CD"))
+    {
+        char *folderDir = strtok(NULL, breakChar);
+        if (folderDir == NULL)
+        {
+            printf("One parameter expected for this command\n");
+            return;
+        }
+        char *invalidParameter = strtok(NULL, breakChar);
+        if (invalidParameter != NULL)
+        {
+            printf("One parameter expected for this command\n");
+            return;
+        }
+        CD(arq, folderDir);
+        return;
+    }
+
+    if (!strcmp(commandName, "DIR"))
+    {
+        char *invalidParameter = strtok(NULL, breakChar);
+        if (invalidParameter != NULL)
+        {
+            printf("No parameters expected for this command\n");
+            return;
+        }
+        printf("???\n");
+        printf("posicao: %d\n", ftell(arq));
+        DIR(arq);
+        printf("!!!\n");
+        return;
+    }
+
+    if (!strcmp(commandName, "RM"))
+    {
+        return;
+    }
+
+    if (!strcmp(commandName, "MKDIR"))
+    {
+        char *dirName = strtok(NULL, breakChar);
+        if (dirName == NULL)
+        {
+            printf("One parameter expected for this command\n");
+            return;
+        }
+        char *invalidParameter = strtok(NULL, breakChar);
+        if (invalidParameter != NULL)
+        {
+            printf("One parameter expected for this command\n");
+            return;
+        }
+        MKDIR(arq, dirName);
+        return;
+    }
+
+    if (!strcmp(commandName, "MKFILE"))
+    {
+        char *fileName = strtok(NULL, breakChar);
+        if (fileName == NULL)
+        {
+            printf("One parameter expected for this command\n");
+            return;
+        }
+        char *invalidParameter = strtok(NULL, breakChar);
+        if (invalidParameter != NULL)
+        {
+            printf("One parameter expected for this command\n");
+            return;
+        }
+        // MKFILE(arq, fileName)
+        return;
+    }
+
+    if (!strcmp(commandName, "EDIT"))
+    {
+        return;
+    }
+
+    if (!strcmp(commandName, "MOVE"))
+    {
+        return;
+    }
+
+    if (!strcmp(commandName, "RENAME"))
+    {
+        return;
+    }
+
+    printf("Unrecognized command\n");
+    return;
+}
+
+void interfaceLoop(FILE *arq)
+{
+    while (1)
+    {
+        printf("%s\n", currentPath);
+        printf("> ");
+        char command[maxCharsInFileSystem];
+        // printf("1\n");
+        // scanf("%[^\n]", command);
+        fgets(command, maxCharsInFileSystem, stdin);
+        // printf("2\n");
+        command[strcspn(command, "\n")] = 0;
+        // printf("3\n");
+        // printf("%s\n", command);
+        // printf("4\n");
+        interfaceHandleCommand(arq, command);
+    }
+}
+
 int main()
 {
     FILE *arq;
@@ -706,64 +910,76 @@ int main()
 
     arq = fopen("arquivo.bin", "r+");
 
-    // short fat = analisa_fat(arq);
-
-    // printf("fatpos antes: %d\n", fat);
-
-    // writeFat(arq, fat, 'c');
-
-    // fat = analisa_fat(arq);
-
-    // printf("fatpos dps: %d", fat);
-
-    // printf("teste \n");
-
-    fclose(arq);
-    return 8;
     goToCluster(arq, 0);
 
-    // printf("teste2");
-    // printf("teste2");
+    MKDIR(arq, "teste1");
+    DIR(arq);
+    CD(arq, "teste1");
 
-    // printf("teste2");
-    // printf("AI");
+    MKDIR(arq, "teste2");
+    printf("Agora é a dir\n");
+    DIR(arq);
 
-    ITEM *item;
-    item = malloc(sizeof(ITEM));
-    item->ler_bit = true;
-    item->eh_pasta_bit = true;
-    strcpy(item->nome, "Item123");
+    printf("%s\n", currentPath);
 
-    MKDIR(arq, item->nome);
+    return 0;
 
     goToCluster(arq, 0);
 
-    strcpy(item->nome, "Item13222");
-    MKDIR(arq, item->nome);
+    interfaceLoop(arq); // teste com interface
 
-    printf("Agora kkkk\n");
-    MKDIR(arq, "kkkk");
+    fclose(arq); // teste com interface
+
+    return 0; // teste com interface
+
+    /*
+        Testes professor:
+        DIR
+        MKDIR a
+        MKDIR b
+        MKDIR c
+        CD b
+        MKDIR g
+        MKFILE a
+        MKFILE b
+        DIR
+        MKDIR F
+        MKFILE F
+        RM . (tentar remover diretorio atual)
+        RENAME
+        MOVE f.txt c/f.txt
+        EDIT
+    */
+
+    goToCluster(arq, 0);
+
+    DIR(arq);
+
+    // ITEM *item;
+    // item = malloc(sizeof(ITEM));
+    // item->ler_bit = true;
+    // item->eh_pasta_bit = true;
+
+    MKDIR(arq, "123");
+    MKDIR(arq, "1234");
 
     // goToCluster(arq, 0);
 
     DIR(arq);
 
-    CD(arq, "Item123");
+    CD(arq, "123");
     DIR(arq);
-    // printf("!\n");
-    strcpy(item->nome, "subp");
-    //goToCluster(arq, 1);
-    //writeItemInCurrFolder(arq, item);
     MKDIR(arq, "teste1");
 
-    printf("Agora teste2:\n");
+    DIR(arq);
+
     MKDIR(arq, "teste2");
-    printf("Agora teste3:\n");
+
     MKDIR(arq, "teste3");
+
+    DIR(arq);
     CD(arq, "teste1");
-    goToCluster(arq, 0);
-    CD(arq, "kkkk");
-    // printf("!!\n");
+
     DIR(arq);
     // CD(arq, "Item13222");
 
@@ -776,3 +992,36 @@ int main()
 
 // corrompido = 255
 //
+
+//unsigned char fat = analisa_fat(arq);
+
+// printf("fatpos dps: %d\n", fat);
+
+// writeFat(arq, fat, 1);
+
+// fat = analisa_fat(arq);
+
+// printf("fatpos dps: %d\n", fat);
+
+// writeFat(arq, fat, 1);
+
+// fat = analisa_fat(arq);
+
+// printf("fatpos dps: %d\n", fat);
+
+// writeFat(arq, fat, 1);
+
+// fat = analisa_fat(arq);
+
+// printf("fatpos dps: %d\n", fat);
+
+// writeFat(arq, fat, 1);
+
+// fat = analisa_fat(arq);
+
+// printf("fatpos dps: %d\n", fat);
+
+// printf("teste \n");
+
+// fclose(arq);
+// return 8;
