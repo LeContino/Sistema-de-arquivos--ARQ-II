@@ -1,6 +1,6 @@
 CD 
 - Gabriel
-- in progress
+- Ok
 
 DIR
  - Lucas
@@ -31,7 +31,6 @@ RENAME
 INTERFACE
 - Gabriel
 - Ok
-- Historico de comando (Melhoria)
 
 analisa_fat
 -Letícia
