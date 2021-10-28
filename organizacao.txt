@@ -6,19 +6,20 @@ DIR
  - Lucas
 
 RM
-- Henrique
-- in progress
+- Henrique (but actually Lucas)
+- ok
 
 MKDIR
 - Lucas 
 
 MKFILE
 - Gabriel
-- in progress
+- Ok
 
 EDIT
 - Gabriel
-- in progress
+- apenas do tamanho de 1 cluster
+- incompleto
 
 MOVE
 -Letícia
